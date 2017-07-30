@@ -67,6 +67,14 @@ void Bdisp_AllClr_VRAM() {
 	glutMainLoopEvent();
 }
 
+void Bdisp_Fill_VRAM(int color, int mode) {
+	for (int y = 0; y < 216; y++) {
+		for (int x = 0; x < 384; x++) {
+			VRAM[y][x] = color;
+		}
+	}
+}
+
 void Bdisp_PutDisp_DD() {
 	glutPostRedisplay();
 	glutMainLoopEvent();
