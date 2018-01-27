@@ -8,6 +8,9 @@
 #include "prizmsim.h"
 #include <ShlObj.h>
 
+ // DmaWaitNext() should be called before starting another Non-blocking DMA transfer or GetKey().
+bool dma_transfer;
+
 extern HDC renderContext;
 extern GLuint screenTexture;
 extern HWND GWnd;
@@ -29,7 +32,7 @@ void SetQuitHandler(void(*handler)()) {
 }
 
 int RTC_GetTicks() {
-	return GetTickCount() * 16 / 125;
+	return (int)(GetTickCount64() * 16 / 125);
 }
 
 void OS_InnerWait_ms(int ms) {
@@ -109,12 +112,12 @@ void Bdisp_AreaClr(struct display_fill* area, unsigned char target, unsigned sho
 
 // Actual OpenGL draw of CPU texture
 void DisplayGLUTScreen() {
-	static long lastTicks = 0;
+	static long long lastTicks = 0;
 	// artificial "vsync", hold tab to fast forward
 	if ((GetAsyncKeyState(VK_TAB) & 0x8000) == 0) {
-		long curTicks;
-		while ((curTicks = GetTickCount()) - 8 < lastTicks) {
-			Sleep(0);;
+		long long curTicks;
+		while ((curTicks = GetTickCount64()) - 8 < lastTicks) {
+			Sleep(0);
 		}
 		lastTicks = curTicks;
 	}
@@ -200,9 +203,19 @@ static int PrintTextHelper(HFONT Font, int height, int x, int y, const char* str
 }
 
 static HFONT MiniFont = CreateFont(18, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, NONANTIALIASED_QUALITY, FF_ROMAN, "Times New Roman");
+static HFONT MiniMiniFont = CreateFont(12, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, FF_DONTCARE, "Calibri");
+static HFONT NormalFont = CreateFont(24, 18, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, NONANTIALIASED_QUALITY, FF_ROMAN, "Consolas");
 
 void PrintMini(int *x, int *y, const char *MB_string, int mode_flags, unsigned int xlimit, int P6, int P7, int color, int back_color, int writeflag, int P11) {
-	*x += PrintTextHelper(MiniFont, 18, *x, *y, MB_string, color, back_color, (mode_flags & 0x40), writeflag);
+	*x += PrintTextHelper(MiniFont, 18, *x, *y, MB_string, color, back_color, (mode_flags & 0x02), writeflag);
+}
+
+void PrintMiniMini(int *x, int *y, const char *MB_string, int mode1, char color, int mode2) {
+	*x += PrintTextHelper(MiniMiniFont, 10, *x, *y, MB_string, COLOR_BLACK, COLOR_WHITE, (mode1 & 0x02), mode2 == 0);
+}
+
+void PrintCXY(int x, int y, const char *cptr, int mode_flags, int P5, int color, int back_color, int P8, int P9) {
+	PrintTextHelper(NormalFont, 24, x, y+24, cptr, color, back_color, mode_flags | TEXT_MODE_TRANSPARENT_BACKGROUND);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -282,6 +295,8 @@ static VKeyMapping keys[NUM_KEY_MAPS] = {
 };
 
 int GetKey(int* key) {
+	if (dma_transfer)
+		printf("Warning: You should call DmaWaitNext() before GetKey() when using Non-blocking DMA.");
 	int result = 0;
 	while (!result) {
 		for (int i = 0; i < NUM_KEY_MAPS; i++) {
@@ -313,7 +328,7 @@ int GetKey(int* key) {
 	};
 
 	if (result == KEY_CTRL_AC) {
-		PostQuitMessage(0);
+//		PostQuitMessage(0);
 	}
 
 	*key = result;
@@ -639,3 +654,6 @@ void Bfile_NameToStr_ncpy(char*dest, const unsigned short*src, size_t n) {
 void Bfile_StrToName_ncpy(unsigned short *dest, const char *source, size_t n) {
 	MultiByteToWideChar(CP_ACP, 0, source, -1, (LPWSTR)dest, 256);
 }
+
+void MsgBoxPush(int lines) { }
+void MsgBoxPop() { }

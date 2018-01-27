@@ -102,11 +102,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 			
 		case WM_KEYDOWN:
 			switch(wParam) {
-				case VK_ESCAPE:
-					printf("ESC pressed, quitting!\n");
-					_CallQuit();
-					PostQuitMessage(0);
-					break;
 			}
 			return 0;
 			
