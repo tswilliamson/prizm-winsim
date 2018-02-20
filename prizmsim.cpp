@@ -203,7 +203,8 @@ static int PrintTextHelper(HFONT Font, int height, int x, int y, const char* str
 }
 
 static HFONT MiniFont = CreateFont(18, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, NONANTIALIASED_QUALITY, FF_ROMAN, "Times New Roman");
-static HFONT MiniMiniFont = CreateFont(12, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, FF_DONTCARE, "Calibri");
+static HFONT MiniMiniFontBold = CreateFont(12, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, FF_DONTCARE, "Calibri");
+static HFONT MiniMiniFont = CreateFont(12, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, FF_DONTCARE, "Calibri");
 static HFONT NormalFont = CreateFont(24, 18, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, NONANTIALIASED_QUALITY, FF_ROMAN, "Consolas");
 
 void PrintMini(int *x, int *y, const char *MB_string, int mode_flags, unsigned int xlimit, int P6, int P7, int color, int back_color, int writeflag, int P11) {
@@ -211,7 +212,7 @@ void PrintMini(int *x, int *y, const char *MB_string, int mode_flags, unsigned i
 }
 
 void PrintMiniMini(int *x, int *y, const char *MB_string, int mode1, char color, int mode2) {
-	*x += PrintTextHelper(MiniMiniFont, 10, *x, *y, MB_string, COLOR_BLACK, COLOR_WHITE, (mode1 & 0x02), mode2 == 0);
+	*x += PrintTextHelper((mode1 & 0x10) ? MiniMiniFontBold : MiniMiniFont, 10, *x, *y, MB_string, COLOR_BLACK, COLOR_WHITE, false, mode2 == 0);
 }
 
 void PrintCXY(int x, int y, const char *cptr, int mode_flags, int P5, int color, int back_color, int P8, int P9) {
