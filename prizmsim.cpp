@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include "freeglut\include\GL\freeglut.h"
 #include "prizmsim.h"
+#include "prizmfont.h"
 #include <ShlObj.h>
 
  // DmaWaitNext() should be called before starting another Non-blocking DMA transfer or GetKey().
@@ -202,17 +203,60 @@ static int PrintTextHelper(HFONT Font, int height, int x, int y, const char* str
 	return rect.right;
 }
 
-static HFONT MiniFont = CreateFont(18, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, NONANTIALIASED_QUALITY, FF_ROMAN, "Times New Roman");
-static HFONT MiniMiniFontBold = CreateFont(12, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, FF_DONTCARE, "Calibri");
-static HFONT MiniMiniFont = CreateFont(12, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, FF_DONTCARE, "Calibri");
+static int PrintPrizmFont(const int* widths, const char datas[][46], int height, int x, int y, const char* string, int color, int back_color, bool transparent, int writeflag = 1)
+{
+	bool warned = false;
+	for (int s = 0; string[s]; s++)
+	{
+		char c = string[s];
+		if ((unsigned)c >= 127)
+		{
+			if (!warned)
+			{
+				printf("Warning: Printing text with (ascii >= 127) is not supported.\n");
+				warned = true;
+			}
+			x += height * 4 / 5;
+		}
+		else
+		{
+			if (writeflag)
+			{
+				char cur;
+				int nextpos = 0;
+				int rest = 0;
+				for (int i = 0; i < widths[c]; i++)
+				{
+					for (int j = 0; j < height; j++)
+					{
+						rest--;
+						if (rest < 0)
+						{
+							cur = datas[c][nextpos++] - 48;
+							rest = 5;
+						}
+						if (cur & 1)
+							VRAM[y + j][x + i] = color;
+						else if (!transparent)
+							VRAM[y + j][x + i] = back_color;
+						cur >>= 1;
+					}
+				}
+			}
+			x += widths[c];
+		}
+	}
+	return x;
+}
+
 static HFONT NormalFont = CreateFont(24, 18, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, NONANTIALIASED_QUALITY, FF_ROMAN, "Consolas");
 
 void PrintMini(int *x, int *y, const char *MB_string, int mode_flags, unsigned int xlimit, int P6, int P7, int color, int back_color, int writeflag, int P11) {
-	*x += PrintTextHelper(MiniFont, 18, *x, *y, MB_string, color, back_color, (mode_flags & 0x02), writeflag);
+	*x = PrintPrizmFont(widths_m, datas_m, 18, *x, *y, MB_string, color, back_color, (mode_flags & 0x02), writeflag);
 }
 
 void PrintMiniMini(int *x, int *y, const char *MB_string, int mode1, char color, int mode2) {
-	*x += PrintTextHelper((mode1 & 0x10) ? MiniMiniFontBold : MiniMiniFont, 10, *x, *y, MB_string, COLOR_BLACK, COLOR_WHITE, false, mode2 == 0);
+	*x = PrintPrizmFont((mode1 & 0x10) ? widths_mmb : widths_mm, (mode1 & 0x10) ? datas_mmb : datas_mm, 10, *x, *y, MB_string, COLOR_BLACK, COLOR_WHITE, false, mode2 == 0);
 }
 
 void PrintCXY(int x, int y, const char *cptr, int mode_flags, int P5, int color, int back_color, int P8, int P9) {
@@ -297,7 +341,7 @@ static VKeyMapping keys[NUM_KEY_MAPS] = {
 
 int GetKey(int* key) {
 	if (dma_transfer)
-		printf("Warning: You should call DmaWaitNext() before GetKey() when using Non-blocking DMA.");
+		printf("Warning: You should call DmaWaitNext() before GetKey() when using Non-blocking DMA.\n");
 	int result = 0;
 	while (!result) {
 		for (int i = 0; i < NUM_KEY_MAPS; i++) {
