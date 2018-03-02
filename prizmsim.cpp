@@ -203,7 +203,19 @@ static int PrintTextHelper(HFONT Font, int height, int x, int y, const char* str
 	return rect.right;
 }
 
-static int PrintPrizmFont(const int* widths, const char datas[][46], int height, int x, int y, const char* string, int color, int back_color, bool transparent, int writeflag = 1)
+static int PrintPrizmFont(
+	const int* widths,
+	const char datas[][46],
+	int height,
+	int x,
+	int y,
+	const char* string,
+	int color,
+	int back_color,
+	bool font_back_inverted,
+	bool back_transparent,
+	bool color_inverted,
+	int writeflag = 1)
 {
 	bool warned = false;
 	for (int s = 0; string[s]; s++)
@@ -222,6 +234,19 @@ static int PrintPrizmFont(const int* widths, const char datas[][46], int height,
 		{
 			if (writeflag)
 			{
+				if (color_inverted)
+				{
+					color = 0xFFFF - color;
+					back_color = 0xFFFF - back_color;
+				}
+				if (back_transparent)
+					back_color = -1;
+				if (font_back_inverted)
+				{
+					int tmp = color;
+					color = back_color;
+					back_color = tmp;
+				}
 				char cur;
 				int nextpos = 0;
 				int rest = 0;
@@ -236,8 +261,11 @@ static int PrintPrizmFont(const int* widths, const char datas[][46], int height,
 							rest = 5;
 						}
 						if (cur & 1)
-							VRAM[y + j][x + i] = color;
-						else if (!transparent)
+						{
+							if (color != -1)
+								VRAM[y + j][x + i] = color;
+						}
+						else if (back_color != -1)
 							VRAM[y + j][x + i] = back_color;
 						cur >>= 1;
 					}
@@ -252,15 +280,52 @@ static int PrintPrizmFont(const int* widths, const char datas[][46], int height,
 static HFONT NormalFont = CreateFont(24, 18, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, NONANTIALIASED_QUALITY, FF_ROMAN, "Consolas");
 
 void PrintMini(int *x, int *y, const char *MB_string, int mode_flags, unsigned int xlimit, int P6, int P7, int color, int back_color, int writeflag, int P11) {
-	*x = PrintPrizmFont(widths_m, datas_m, 18, *x, *y, MB_string, color, back_color, (mode_flags & 0x02), writeflag);
+	if (mode_flags & 0x02) back_color = -1;
+	*x = PrintPrizmFont(
+		widths_m,
+		datas_m,
+		18,
+		*x,
+		*y + ((mode_flags & 0x40) ? 0 : 24),
+		MB_string,
+		color,
+		back_color,
+		mode_flags & 0x01,
+		mode_flags & 0x02,
+		mode_flags & 0x04,
+		writeflag);
 }
 
 void PrintMiniMini(int *x, int *y, const char *MB_string, int mode1, char color, int mode2) {
-	*x = PrintPrizmFont((mode1 & 0x10) ? widths_mmb : widths_mm, (mode1 & 0x10) ? datas_mmb : datas_mm, 10, *x, *y, MB_string, COLOR_BLACK, COLOR_WHITE, false, mode2 == 0);
+	static int color_map[] =
+	{
+		COLOR_BLACK,
+		COLOR_BLUE,
+		COLOR_LIME,
+		COLOR_CYAN,
+		COLOR_RED,
+		COLOR_MAGENTA,
+		COLOR_YELLOW,
+		COLOR_WHITE
+	};
+
+	*x = PrintPrizmFont(
+		(mode1 & 0x10) ? widths_mmb : widths_mm,
+		(mode1 & 0x10) ? datas_mmb : datas_mm,
+		10,
+		*x,
+		*y + ((mode1 & 0x40) ? 0 : 24),
+		MB_string,
+		color_map[color],
+		COLOR_WHITE,
+		mode1 & 0x01,
+		mode1 & 0x02,
+		mode1 & 0x04,
+		!mode2);
 }
 
 void PrintCXY(int x, int y, const char *cptr, int mode_flags, int P5, int color, int back_color, int P8, int P9) {
-	PrintTextHelper(NormalFont, 24, x, y+24, cptr, color, back_color, mode_flags | TEXT_MODE_TRANSPARENT_BACKGROUND);
+	PrintTextHelper(NormalFont, 24, x, y + 24, cptr, color, back_color, mode_flags | TEXT_MODE_TRANSPARENT_BACKGROUND);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
