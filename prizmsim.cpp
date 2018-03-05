@@ -225,7 +225,7 @@ static int PrintPrizmFont(
 		{
 			if (!warned)
 			{
-				printf("Warning: Printing text with (ascii >= 127) is not supported.\n");
+				printf("Not supported: Printing text with (ascii >= 127).\n");
 				warned = true;
 			}
 			x += height * 4 / 5;
@@ -252,8 +252,10 @@ static int PrintPrizmFont(
 				int rest = 0;
 				for (int i = 0; i < widths[c]; i++)
 				{
+					if (x + i >= LCD_WIDTH_PX) break;
 					for (int j = 0; j < height; j++)
 					{
+						if (y + j >= LCD_HEIGHT_PX) break;
 						rest--;
 						if (rest < 0)
 						{
@@ -457,6 +459,65 @@ bool keyDown_fast(unsigned char keycode) {
 	}
 
 	return false;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// MessageBox
+
+bool msg_box_pushed = false;
+
+const int bx = 11;
+const int by = 33;
+const int bw = 362;
+const int bh = 169;
+color_t temp_VRAM[bh][bw];
+
+void MsgBoxPush(int lines)
+{
+	if (lines < 1 || lines > 6)
+		printf("Warning: MsgBox lines should between 1 & 6, inclusive.\n");
+	if (msg_box_pushed)
+		printf("Warning: Need to call MsgBoxPop() before MsgBoxPush().\n");
+	for (int j = 0; j < bh; j++)
+		for (int i = 0; i < bw; i++)
+			temp_VRAM[j][i] = VRAM[by + j][bx + i];
+	msg_box_pushed = true;
+
+	int dx = 27;
+	int dy = 33 + (5 - lines) / 2 * 24;
+	int w = 331;
+	int h = lines * 24 + 25;
+
+	for (int j = 0; j < h; j++)
+		for (int i = 0; i < w; i++)
+		{
+			color_t c = COLOR_WHITE;
+			if (i == 0 || j == 0 || i == w - 1 || j == h - 1)
+				c = COLOR_BLACK;
+			else if (i == 1 || j == 1)
+				c = COLOR_WHITE;
+			else if (i == w - 2 || j == h - 2)
+				c = COLOR_BLACK;
+			else if ((i < 6 || i >= w - 6) || (j < 6 || j >= h - 6))
+				c = COLOR_BLUE;
+			else if (i == w - 7 || j == h - 7)
+				c = COLOR_WHITE;
+			else if ((i < 8 || i == w - 8) || (j < 8 || j == h - 8))
+				c = COLOR_BLACK;
+			VRAM[dy + j][dx + i] = c;
+		}
+}
+
+void MsgBoxPop()
+{
+	if (!msg_box_pushed)
+		printf("Warning: Must call MsgBoxPush() before MsgBoxPop() (System crash).");
+
+	for (int j = 0; j < bh; j++)
+		for (int i = 0; i < bw; i++)
+			VRAM[by + j][bx + i] = temp_VRAM[j][i];
+
+	msg_box_pushed = false;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -764,6 +825,3 @@ void Bfile_NameToStr_ncpy(char*dest, const unsigned short*src, size_t n) {
 void Bfile_StrToName_ncpy(unsigned short *dest, const char *source, size_t n) {
 	MultiByteToWideChar(CP_ACP, 0, source, -1, (LPWSTR)dest, 256);
 }
-
-void MsgBoxPush(int lines) { }
-void MsgBoxPop() { }
