@@ -298,6 +298,40 @@ void PrintMini(int *x, int *y, const char *MB_string, int mode_flags, unsigned i
 		writeflag);
 }
 
+void Bdisp_MMPrintRef(int *x, int *y, const char *string, int mode_flags, int xlimit, int P6, int P7, int color, int back_color, int writeflag, int P11) {
+	if (mode_flags & 0x02) back_color = -1;
+	*x = PrintPrizmFont(
+		widths_16,
+		datas_16,
+		16,
+		*x,
+		*y + ((mode_flags & 0x40) ? 0 : 24),
+		string,
+		color,
+		back_color,
+		mode_flags & 0x01,
+		mode_flags & 0x02,
+		mode_flags & 0x04,
+		writeflag);
+}
+
+void Bdisp_MMPrint(int x, int y, const char *string, int mode_flags, int xlimit, int P6, int P7, int color, int back_color, int writeflag, int P11) {
+	if (mode_flags & 0x02) back_color = -1;
+	PrintPrizmFont(
+		widths_16,
+		datas_16,
+		16,
+		x,
+		y + ((mode_flags & 0x40) ? 0 : 24),
+		string,
+		color,
+		back_color,
+		mode_flags & 0x01,
+		mode_flags & 0x02,
+		mode_flags & 0x04,
+		writeflag);
+}
+
 void PrintMiniMini(int *x, int *y, const char *MB_string, int mode1, char color, int mode2) {
 	static int color_map[] =
 	{
