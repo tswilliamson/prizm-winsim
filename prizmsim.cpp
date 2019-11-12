@@ -6,7 +6,11 @@
 #include <stdio.h>
 #include "freeglut\include\GL\freeglut.h"
 #include "prizmsim.h"
+#include "prizmfont.h"
 #include <ShlObj.h>
+
+ // DmaWaitNext() should be called before starting another Non-blocking DMA transfer or GetKey().
+bool dma_transfer;
 
 extern HDC renderContext;
 extern GLuint screenTexture;
@@ -29,7 +33,7 @@ void SetQuitHandler(void(*handler)()) {
 }
 
 int RTC_GetTicks() {
-	return GetTickCount() * 16 / 125;
+	return (int)(GetTickCount64() * 16 / 125);
 }
 
 void OS_InnerWait_ms(int ms) {
@@ -109,12 +113,12 @@ void Bdisp_AreaClr(struct display_fill* area, unsigned char target, unsigned sho
 
 // Actual OpenGL draw of CPU texture
 void DisplayGLUTScreen() {
-	static long lastTicks = 0;
+	static long long lastTicks = 0;
 	// artificial "vsync", hold tab to fast forward
 	if ((GetAsyncKeyState(VK_TAB) & 0x8000) == 0) {
-		long curTicks;
-		while ((curTicks = GetTickCount()) - 8 < lastTicks) {
-			Sleep(0);;
+		long long curTicks;
+		while ((curTicks = GetTickCount64()) - 8 < lastTicks) {
+			Sleep(0);
 		}
 		lastTicks = curTicks;
 	}
@@ -199,10 +203,165 @@ static int PrintTextHelper(HFONT Font, int height, int x, int y, const char* str
 	return rect.right;
 }
 
-static HFONT MiniFont = CreateFont(18, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, NONANTIALIASED_QUALITY, FF_ROMAN, "Times New Roman");
+static int PrintPrizmFont(
+	const int* widths,
+	const char datas[][46],
+	int height,
+	int x,
+	int y,
+	const char* string,
+	int color,
+	int back_color,
+	bool font_back_inverted,
+	bool back_transparent,
+	bool color_inverted,
+	int writeflag = 1)
+{
+	bool warned = false;
+	for (int s = 0; string[s]; s++)
+	{
+		char c = string[s];
+		if ((unsigned)c >= 127)
+		{
+			if (!warned)
+			{
+				printf("Not supported: Printing text with (ascii >= 127).\n");
+				warned = true;
+			}
+			x += height * 4 / 5;
+		}
+		else
+		{
+			if (writeflag)
+			{
+				if (color_inverted)
+				{
+					color = 0xFFFF - color;
+					back_color = 0xFFFF - back_color;
+				}
+				if (back_transparent)
+					back_color = -1;
+				if (font_back_inverted)
+				{
+					int tmp = color;
+					color = back_color;
+					back_color = tmp;
+				}
+				char cur;
+				int nextpos = 0;
+				int rest = 0;
+				for (int i = 0; i < widths[c]; i++)
+				{
+					if (x + i >= LCD_WIDTH_PX) break;
+					for (int j = 0; j < height; j++)
+					{
+						if (y + j >= LCD_HEIGHT_PX) break;
+						rest--;
+						if (rest < 0)
+						{
+							cur = datas[c][nextpos++] - 48;
+							rest = 5;
+						}
+						if (cur & 1)
+						{
+							if (color != -1)
+								VRAM[y + j][x + i] = color;
+						}
+						else if (back_color != -1)
+							VRAM[y + j][x + i] = back_color;
+						cur >>= 1;
+					}
+				}
+			}
+			x += widths[c];
+		}
+	}
+	return x;
+}
+
+static HFONT NormalFont = CreateFont(24, 18, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, NONANTIALIASED_QUALITY, FF_ROMAN, "Consolas");
 
 void PrintMini(int *x, int *y, const char *MB_string, int mode_flags, unsigned int xlimit, int P6, int P7, int color, int back_color, int writeflag, int P11) {
-	*x += PrintTextHelper(MiniFont, 18, *x, *y, MB_string, color, back_color, (mode_flags & 0x40), writeflag);
+	if (mode_flags & 0x02) back_color = -1;
+	*x = PrintPrizmFont(
+		widths_m,
+		datas_m,
+		18,
+		*x,
+		*y + ((mode_flags & 0x40) ? 0 : 24),
+		MB_string,
+		color,
+		back_color,
+		mode_flags & 0x01,
+		mode_flags & 0x02,
+		mode_flags & 0x04,
+		writeflag);
+}
+
+void Bdisp_MMPrintRef(int *x, int *y, const char *string, int mode_flags, int xlimit, int P6, int P7, int color, int back_color, int writeflag, int P11) {
+	if (mode_flags & 0x02) back_color = -1;
+	*x = PrintPrizmFont(
+		widths_16,
+		datas_16,
+		16,
+		*x,
+		*y + ((mode_flags & 0x40) ? 0 : 24),
+		string,
+		color,
+		back_color,
+		mode_flags & 0x01,
+		mode_flags & 0x02,
+		mode_flags & 0x04,
+		writeflag);
+}
+
+void Bdisp_MMPrint(int x, int y, const char *string, int mode_flags, int xlimit, int P6, int P7, int color, int back_color, int writeflag, int P11) {
+	if (mode_flags & 0x02) back_color = -1;
+	PrintPrizmFont(
+		widths_16,
+		datas_16,
+		16,
+		x,
+		y + ((mode_flags & 0x40) ? 0 : 24),
+		string,
+		color,
+		back_color,
+		mode_flags & 0x01,
+		mode_flags & 0x02,
+		mode_flags & 0x04,
+		writeflag);
+}
+
+void PrintMiniMini(int *x, int *y, const char *MB_string, int mode1, char color, int mode2) {
+	static int color_map[] =
+	{
+		COLOR_BLACK,
+		COLOR_BLUE,
+		COLOR_LIME,
+		COLOR_CYAN,
+		COLOR_RED,
+		COLOR_MAGENTA,
+		COLOR_YELLOW,
+		COLOR_WHITE
+	};
+
+	*x = PrintPrizmFont(
+		(mode1 & 0x10) ? widths_mmb : widths_mm,
+		(mode1 & 0x10) ? datas_mmb : datas_mm,
+		10,
+		*x,
+		*y + ((mode1 & 0x40) ? 0 : 24),
+		MB_string,
+		color_map[color],
+		COLOR_WHITE,
+		mode1 & 0x01,
+		mode1 & 0x02,
+		mode1 & 0x04,
+		!mode2);
+}
+
+void PrintCXY(int x, int y, const char *cptr, int mode_flags, int P5, int color, int back_color, int P8, int P9) {
+	PrintTextHelper(NormalFont, 24, x, y + 24, cptr, color, back_color, mode_flags | TEXT_MODE_TRANSPARENT_BACKGROUND);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -282,6 +441,8 @@ static VKeyMapping keys[NUM_KEY_MAPS] = {
 };
 
 int GetKey(int* key) {
+	if (dma_transfer)
+		printf("Warning: You should call DmaWaitNext() before GetKey() when using Non-blocking DMA.\n");
 	int result = 0;
 	while (!result) {
 		for (int i = 0; i < NUM_KEY_MAPS; i++) {
@@ -313,7 +474,7 @@ int GetKey(int* key) {
 	};
 
 	if (result == KEY_CTRL_AC) {
-		PostQuitMessage(0);
+//		PostQuitMessage(0);
 	}
 
 	*key = result;
@@ -332,6 +493,65 @@ bool keyDown_fast(unsigned char keycode) {
 	}
 
 	return false;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// MessageBox
+
+bool msg_box_pushed = false;
+
+const int bx = 11;
+const int by = 33;
+const int bw = 362;
+const int bh = 169;
+color_t temp_VRAM[bh][bw];
+
+void MsgBoxPush(int lines)
+{
+	if (lines < 1 || lines > 6)
+		printf("Warning: MsgBox lines should between 1 & 6, inclusive.\n");
+	if (msg_box_pushed)
+		printf("Warning: Need to call MsgBoxPop() before MsgBoxPush().\n");
+	for (int j = 0; j < bh; j++)
+		for (int i = 0; i < bw; i++)
+			temp_VRAM[j][i] = VRAM[by + j][bx + i];
+	msg_box_pushed = true;
+
+	int dx = 27;
+	int dy = 33 + (5 - lines) / 2 * 24;
+	int w = 331;
+	int h = lines * 24 + 25;
+
+	for (int j = 0; j < h; j++)
+		for (int i = 0; i < w; i++)
+		{
+			color_t c = COLOR_WHITE;
+			if (i == 0 || j == 0 || i == w - 1 || j == h - 1)
+				c = COLOR_BLACK;
+			else if (i == 1 || j == 1)
+				c = COLOR_WHITE;
+			else if (i == w - 2 || j == h - 2)
+				c = COLOR_BLACK;
+			else if ((i < 6 || i >= w - 6) || (j < 6 || j >= h - 6))
+				c = COLOR_BLUE;
+			else if (i == w - 7 || j == h - 7)
+				c = COLOR_WHITE;
+			else if ((i < 8 || i == w - 8) || (j < 8 || j == h - 8))
+				c = COLOR_BLACK;
+			VRAM[dy + j][dx + i] = c;
+		}
+}
+
+void MsgBoxPop()
+{
+	if (!msg_box_pushed)
+		printf("Warning: Must call MsgBoxPush() before MsgBoxPop() (System crash).");
+
+	for (int j = 0; j < bh; j++)
+		for (int i = 0; i < bw; i++)
+			VRAM[by + j][bx + i] = temp_VRAM[j][i];
+
+	msg_box_pushed = false;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
